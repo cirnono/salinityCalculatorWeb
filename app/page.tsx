@@ -247,20 +247,6 @@ export default function Home() {
                         </label>
                     </div>
 
-                    {previewUrl && (
-                        <div className="rounded-2xl border bg-white p-3 shadow-sm">
-                            <div className="mb-2 text-sm font-semibold text-gray-700">
-                                图片预览
-                            </div>
-
-                            <img
-                                src={previewUrl}
-                                alt="盐度图片预览"
-                                className="max-h-[60vh] w-full rounded-xl object-contain"
-                            />
-                        </div>
-                    )}
-
                     {resData && (
                         <div>
                             <label className="mb-2 block text-sm font-semibold">
@@ -283,6 +269,20 @@ export default function Home() {
                                     </button>
                                 ))}
                             </div>
+                        </div>
+                    )}
+
+                    {previewUrl && (
+                        <div className="rounded-2xl border bg-white p-3 shadow-sm">
+                            <div className="mb-2 text-sm font-semibold text-gray-700">
+                                图片预览
+                            </div>
+
+                            <img
+                                src={previewUrl}
+                                alt="盐度图片预览"
+                                className="max-h-[60vh] w-full rounded-xl object-contain"
+                            />
                         </div>
                     )}
 
@@ -349,14 +349,14 @@ export default function Home() {
                         </div>
 
                         <div className="-mx-3 overflow-x-auto px-3">
-                            <table className="min-w-[760px] border text-sm">
+                            <table className="min-w-190 border text-sm">
                                 <thead>
                                     <tr className="bg-gray-100">
                                         <th className="border p-2">品类</th>
                                         <th className="border p-2">真实盐度</th>
                                         <th className="border p-2">目标盐度</th>
                                         <th className="border p-2">
-                                            锅容量(g)
+                                            锅容量(kg)
                                         </th>
                                         <th className="border p-2">温度</th>
                                         <th className="border p-2">有效性</th>
@@ -560,7 +560,7 @@ export default function Home() {
                         </div>
 
                         <div className="rounded-xl bg-gray-50 p-4">
-                            <pre className="whitespace-pre-wrap break-words text-base font-semibold leading-8">
+                            <pre className="whitespace-pre-wrap wrap-break-word text-base font-semibold leading-8">
                                 {outputText}
                             </pre>
                         </div>
