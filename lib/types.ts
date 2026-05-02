@@ -28,7 +28,6 @@ export type CalculationItem = {
     salinity: number | null;
     temperature: number | null;
     temperatureValid: boolean;
-    temperatureWarning: string | null;
     raw: string;
     capacity?: number | null;
     type: "simple" | "weighted";

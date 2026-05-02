@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import type { ApiResult, CalculationItem } from "@/lib/types";
 import type { StoreCode } from "@/lib/config";
 import { STORES, getPotCapacity, getTargetSalinity } from "@/lib/config";
@@ -12,6 +12,7 @@ import {
 
 export default function Home() {
     const [file, setFile] = useState<File | null>(null);
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
     const [selectedStore, setSelectedStore] = useState<StoreCode>("ew");
     const [showStoreModal, setShowStoreModal] = useState(false);
@@ -24,6 +25,42 @@ export default function Home() {
     const [showRawJson, setShowRawJson] = useState(false);
 
     const [loading, setLoading] = useState(false);
+    const [copied, setCopied] = useState(false);
+
+    const outputText = useMemo(() => {
+        return editableData
+            .map((item) => {
+                const target = getTargetSalinity(item.label);
+                const saltToAdd = calculateSaltToAdd(
+                    target,
+                    item.salinity,
+                    item.capacity,
+                );
+                const output = calculateIngredients(item.label, saltToAdd);
+
+                return `${item.label}: ${output ?? "-"}`;
+            })
+            .join("\n");
+    }, [editableData]);
+
+    function handleFileChange(nextFile: File | null) {
+        setFile(nextFile);
+        setResData(null);
+        setEditableData([]);
+        setExpandedRows({});
+        setShowRawJson(false);
+        setCopied(false);
+
+        if (previewUrl) {
+            URL.revokeObjectURL(previewUrl);
+        }
+
+        if (nextFile) {
+            setPreviewUrl(URL.createObjectURL(nextFile));
+        } else {
+            setPreviewUrl(null);
+        }
+    }
 
     function openStoreModal(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault();
@@ -54,6 +91,7 @@ export default function Home() {
         setEditableData([]);
         setExpandedRows({});
         setShowRawJson(false);
+        setCopied(false);
 
         try {
             const res = await fetch("/api/calculate", {
@@ -165,332 +203,388 @@ export default function Home() {
         );
     }
 
+    async function copyResult() {
+        if (!outputText) return;
+
+        await navigator.clipboard.writeText(outputText);
+        setCopied(true);
+
+        window.setTimeout(() => {
+            setCopied(false);
+        }, 1500);
+    }
+
     return (
-        <main className="mx-auto max-w-5xl p-6">
-            <h1 className="mb-6 text-2xl font-bold">盐度计算</h1>
+        <main className="min-h-screen bg-gray-50 px-3 py-4">
+            <div className="mx-auto w-full max-w-md space-y-5">
+                <h1 className="text-center text-2xl font-bold">盐度计算</h1>
 
-            <form onSubmit={openStoreModal} className="space-y-4">
-                <div>
-                    <label className="mb-2 block font-medium">选择图片</label>
-                    <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                            setFile(e.target.files?.[0] ?? null);
-                        }}
-                    />
-                </div>
-
-                {resData && (
-                    <div className="mt-4">
-                        <label className="mb-2 block font-medium">
-                            当前门店
+                <form onSubmit={openStoreModal} className="space-y-4">
+                    <div>
+                        <label className="mb-2 block text-sm font-semibold">
+                            选择图片
                         </label>
 
-                        <div className="flex gap-2">
-                            {STORES.map((store) => (
-                                <button
-                                    key={store.code}
-                                    type="button"
-                                    onClick={() => changeStore(store.code)}
-                                    className={`rounded border px-4 py-2 ${
-                                        selectedStore === store.code
-                                            ? "bg-black text-white"
-                                            : "bg-white text-black"
-                                    }`}
-                                >
-                                    {store.name}
-                                </button>
-                            ))}
+                        <label className="flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-300 bg-white p-5 text-center shadow-sm active:scale-[0.99]">
+                            <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) =>
+                                    handleFileChange(
+                                        e.target.files?.[0] ?? null,
+                                    )
+                                }
+                            />
+
+                            <div className="max-w-full break-all text-base font-semibold">
+                                {file ? file.name : "点击选择盐度图片"}
+                            </div>
+
+                            <div className="mt-2 text-sm leading-6 text-gray-500">
+                                支持手机拍照、截图、微信图片
+                            </div>
+                        </label>
+                    </div>
+
+                    {previewUrl && (
+                        <div className="rounded-2xl border bg-white p-3 shadow-sm">
+                            <div className="mb-2 text-sm font-semibold text-gray-700">
+                                图片预览
+                            </div>
+
+                            <img
+                                src={previewUrl}
+                                alt="盐度图片预览"
+                                className="max-h-[60vh] w-full rounded-xl object-contain"
+                            />
+                        </div>
+                    )}
+
+                    {resData && (
+                        <div>
+                            <label className="mb-2 block text-sm font-semibold">
+                                当前门店
+                            </label>
+
+                            <div className="grid grid-cols-3 gap-2">
+                                {STORES.map((store) => (
+                                    <button
+                                        key={store.code}
+                                        type="button"
+                                        onClick={() => changeStore(store.code)}
+                                        className={`min-h-11 rounded-xl border px-2 py-2 text-sm font-medium ${
+                                            selectedStore === store.code
+                                                ? "border-black bg-black text-white"
+                                                : "border-gray-300 bg-white text-black"
+                                        }`}
+                                    >
+                                        {store.name}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <button
+                        type="submit"
+                        disabled={loading}
+                        className="h-12 w-full rounded-xl bg-black text-base font-semibold text-white disabled:opacity-50"
+                    >
+                        {loading ? "处理中..." : "上传"}
+                    </button>
+                </form>
+
+                {showStoreModal && (
+                    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
+                        <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+                            <h2 className="mb-4 text-lg font-bold">
+                                请选择门店
+                            </h2>
+
+                            <div className="grid gap-3">
+                                {STORES.map((store) => (
+                                    <button
+                                        key={store.code}
+                                        type="button"
+                                        onClick={() =>
+                                            uploadWithStore(store.code)
+                                        }
+                                        className="min-h-12 rounded-xl border bg-white px-4 py-3 text-left font-medium active:bg-gray-100"
+                                    >
+                                        {store.name}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={() => setShowStoreModal(false)}
+                                className="mt-4 h-11 w-full rounded-xl border text-sm font-medium"
+                            >
+                                取消
+                            </button>
                         </div>
                     </div>
                 )}
 
-                <button
-                    type="submit"
-                    disabled={loading}
-                    className="rounded bg-black px-4 py-2 text-white disabled:opacity-50"
-                >
-                    {loading ? "处理中..." : "上传"}
-                </button>
-            </form>
+                {resData?.error && (
+                    <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
+                        {resData.error}
+                    </div>
+                )}
 
-            {showStoreModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-                    <div className="w-full max-w-md rounded bg-white p-6 shadow-lg">
-                        <h2 className="mb-4 text-lg font-bold">请选择门店</h2>
+                {editableData.length > 0 && (
+                    <div className="rounded-2xl border bg-white p-3 shadow-sm">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                            <h2 className="text-lg font-bold">计算结果</h2>
 
-                        <div className="grid gap-3">
-                            {STORES.map((store) => (
-                                <button
-                                    key={store.code}
-                                    type="button"
-                                    onClick={() => uploadWithStore(store.code)}
-                                    className="rounded border px-4 py-3 text-left hover:bg-gray-100"
-                                >
-                                    {store.name}
-                                </button>
-                            ))}
+                            <button
+                                type="button"
+                                onClick={resetEditableData}
+                                className="shrink-0 rounded-xl border px-3 py-2 text-sm font-medium"
+                            >
+                                恢复识别值
+                            </button>
                         </div>
 
-                        <button
-                            type="button"
-                            onClick={() => setShowStoreModal(false)}
-                            className="mt-4 rounded border px-4 py-2 text-sm"
-                        >
-                            取消
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {resData?.error && (
-                <div className="mt-6 rounded border border-red-300 bg-red-50 p-4 text-red-700">
-                    {resData.error}
-                </div>
-            )}
-
-            {editableData.length > 0 && (
-                <div className="mt-6">
-                    <div className="mb-2 flex items-center justify-between">
-                        <h2 className="text-lg font-bold">计算结果</h2>
-
-                        <button
-                            type="button"
-                            onClick={resetEditableData}
-                            className="rounded border px-3 py-1 text-sm"
-                        >
-                            恢复识别值
-                        </button>
-                    </div>
-
-                    <table className="w-full border text-sm">
-                        <thead>
-                            <tr className="bg-gray-100">
-                                <th className="border p-2">品类</th>
-                                <th className="border p-2">真实盐度</th>
-                                <th className="border p-2">目标盐度</th>
-                                <th className="border p-2">锅容量(g)</th>
-                                <th className="border p-2">温度</th>
-                                <th className="border p-2">温度是否有效</th>
-                                <th className="border p-2">提示</th>
-                                <th className="border p-2">原始识别</th>
-                            </tr>
-                        </thead>
-
-                        <tbody>
-                            {editableData.map((item, index) => (
-                                <Fragment key={`${item.label}-${index}`}>
-                                    <tr>
-                                        <td className="border p-2">
-                                            {item.type === "weighted" ? (
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        toggleRow(index)
-                                                    }
-                                                    className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded border text-xs"
-                                                >
-                                                    {expandedRows[index]
-                                                        ? "▼"
-                                                        : "▶"}
-                                                </button>
-                                            ) : (
-                                                <span className="mr-8" />
-                                            )}
-
-                                            {item.label}
-                                        </td>
-
-                                        <td className="border p-2">
-                                            <input
-                                                className="w-24 rounded border px-2 py-1"
-                                                type="number"
-                                                step="0.01"
-                                                value={item.salinity ?? ""}
-                                                onChange={(e) =>
-                                                    updateSalinity(
-                                                        index,
-                                                        e.target.value,
-                                                    )
-                                                }
-                                            />
-                                        </td>
-
-                                        <td className="border p-2">
-                                            {getTargetSalinity(item.label) ??
-                                                "-"}
-                                        </td>
-
-                                        <td className="border p-2">
-                                            <input
-                                                className="w-28 rounded border px-2 py-1"
-                                                type="number"
-                                                step="1"
-                                                value={item.capacity ?? ""}
-                                                onChange={(e) =>
-                                                    updateCapacity(
-                                                        index,
-                                                        e.target.value,
-                                                    )
-                                                }
-                                            />
-                                        </td>
-
-                                        <td className="border p-2">
-                                            {item.temperature === null
-                                                ? "-"
-                                                : `${item.temperature}°C`}
-                                        </td>
-
-                                        <td
-                                            className={`border p-2 ${
-                                                item.temperatureValid
-                                                    ? "text-green-700"
-                                                    : "text-red-600"
-                                            }`}
-                                        >
-                                            {item.temperatureValid
-                                                ? "有效"
-                                                : "无效"}
-                                        </td>
-
-                                        <td className="border p-2 text-red-600">
-                                            {item.temperatureWarning ?? "-"}
-                                        </td>
-
-                                        <td className="border p-2 text-gray-500">
-                                            {item.raw}
-                                        </td>
+                        <div className="-mx-3 overflow-x-auto px-3">
+                            <table className="min-w-[760px] border text-sm">
+                                <thead>
+                                    <tr className="bg-gray-100">
+                                        <th className="border p-2">品类</th>
+                                        <th className="border p-2">真实盐度</th>
+                                        <th className="border p-2">目标盐度</th>
+                                        <th className="border p-2">
+                                            锅容量(g)
+                                        </th>
+                                        <th className="border p-2">温度</th>
+                                        <th className="border p-2">有效性</th>
+                                        <th className="border p-2">原始识别</th>
                                     </tr>
+                                </thead>
 
-                                    {item.type === "weighted" &&
-                                        item.weighted &&
-                                        expandedRows[index] && (
+                                <tbody>
+                                    {editableData.map((item, index) => (
+                                        <Fragment
+                                            key={`${item.label}-${index}`}
+                                        >
                                             <tr>
+                                                <td className="border p-2 font-medium">
+                                                    {item.type ===
+                                                    "weighted" ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                toggleRow(index)
+                                                            }
+                                                            className="mr-2 inline-flex h-8 w-8 items-center justify-center rounded-lg border text-xs"
+                                                        >
+                                                            {expandedRows[index]
+                                                                ? "▼"
+                                                                : "▶"}
+                                                        </button>
+                                                    ) : (
+                                                        <span className="mr-10" />
+                                                    )}
+
+                                                    {item.label}
+                                                </td>
+
+                                                <td className="border p-2">
+                                                    <input
+                                                        className="h-10 w-24 rounded-lg border px-2"
+                                                        type="number"
+                                                        step="0.01"
+                                                        value={
+                                                            item.salinity ?? ""
+                                                        }
+                                                        onChange={(e) =>
+                                                            updateSalinity(
+                                                                index,
+                                                                e.target.value,
+                                                            )
+                                                        }
+                                                    />
+                                                </td>
+
+                                                <td className="border p-2">
+                                                    {getTargetSalinity(
+                                                        item.label,
+                                                    ) ?? "-"}
+                                                </td>
+
+                                                <td className="border p-2">
+                                                    <input
+                                                        className="h-10 w-28 rounded-lg border px-2"
+                                                        type="number"
+                                                        step="1"
+                                                        value={
+                                                            item.capacity ?? ""
+                                                        }
+                                                        onChange={(e) =>
+                                                            updateCapacity(
+                                                                index,
+                                                                e.target.value,
+                                                            )
+                                                        }
+                                                    />
+                                                </td>
+
+                                                <td className="border p-2">
+                                                    {item.temperature === null
+                                                        ? "-"
+                                                        : `${item.temperature}°C`}
+                                                </td>
+
                                                 <td
-                                                    colSpan={8}
-                                                    className="border bg-gray-50 p-3"
+                                                    className={`border p-2 font-medium ${
+                                                        item.temperatureValid
+                                                            ? "text-green-700"
+                                                            : "text-red-600"
+                                                    }`}
                                                 >
-                                                    <div className="grid grid-cols-6 gap-3 text-sm">
-                                                        {(
-                                                            [
-                                                                [
-                                                                    "tare1",
-                                                                    "容器1",
-                                                                ],
-                                                                [
-                                                                    "total1",
-                                                                    "总重1",
-                                                                ],
-                                                                [
-                                                                    "salinity1",
-                                                                    "盐度1",
-                                                                ],
-                                                                [
-                                                                    "tare2",
-                                                                    "容器2",
-                                                                ],
-                                                                [
-                                                                    "total2",
-                                                                    "总重2",
-                                                                ],
-                                                                [
-                                                                    "temperature",
-                                                                    "温度2",
-                                                                ],
-                                                            ] as const
-                                                        ).map(
-                                                            ([key, label]) => (
-                                                                <label
-                                                                    key={key}
-                                                                    className="space-y-1"
-                                                                >
-                                                                    <span className="block text-gray-600">
-                                                                        {label}
-                                                                    </span>
-                                                                    <input
-                                                                        className="w-full rounded border px-2 py-1"
-                                                                        type="number"
-                                                                        step="0.01"
-                                                                        value={
-                                                                            item
-                                                                                .weighted?.[
-                                                                                key
-                                                                            ] ??
-                                                                            ""
-                                                                        }
-                                                                        onChange={(
-                                                                            e,
-                                                                        ) =>
-                                                                            updateWeightedValue(
-                                                                                index,
-                                                                                key,
-                                                                                e
-                                                                                    .target
-                                                                                    .value,
-                                                                            )
-                                                                        }
-                                                                    />
-                                                                </label>
-                                                            ),
-                                                        )}
-                                                    </div>
+                                                    {item.temperatureValid
+                                                        ? "有效"
+                                                        : "无效"}
+                                                </td>
+
+                                                <td className="border p-2 text-gray-500">
+                                                    {item.raw}
                                                 </td>
                                             </tr>
-                                        )}
-                                </Fragment>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
 
-            {editableData.length > 0 && (
-                <div className="mt-6 rounded border p-4">
-                    <h2 className="mb-3 text-lg font-bold">添加结果</h2>
+                                            {item.type === "weighted" &&
+                                                item.weighted &&
+                                                expandedRows[index] && (
+                                                    <tr>
+                                                        <td
+                                                            colSpan={8}
+                                                            className="border bg-gray-50 p-3"
+                                                        >
+                                                            <div className="grid grid-cols-2 gap-3 text-sm">
+                                                                {(
+                                                                    [
+                                                                        [
+                                                                            "tare1",
+                                                                            "容器1",
+                                                                        ],
+                                                                        [
+                                                                            "total1",
+                                                                            "总重1",
+                                                                        ],
+                                                                        [
+                                                                            "salinity1",
+                                                                            "盐度1",
+                                                                        ],
+                                                                        [
+                                                                            "tare2",
+                                                                            "容器2",
+                                                                        ],
+                                                                        [
+                                                                            "total2",
+                                                                            "总重2",
+                                                                        ],
+                                                                        [
+                                                                            "temperature",
+                                                                            "温度2",
+                                                                        ],
+                                                                    ] as const
+                                                                ).map(
+                                                                    ([
+                                                                        key,
+                                                                        label,
+                                                                    ]) => (
+                                                                        <label
+                                                                            key={
+                                                                                key
+                                                                            }
+                                                                            className="space-y-1"
+                                                                        >
+                                                                            <span className="block text-gray-600">
+                                                                                {
+                                                                                    label
+                                                                                }
+                                                                            </span>
 
-                    <div className="space-y-1 text-base">
-                        {editableData.map((item, index) => {
-                            const target = getTargetSalinity(item.label);
-                            const saltToAdd = calculateSaltToAdd(
-                                target,
-                                item.salinity,
-                                item.capacity,
-                            );
-
-                            const output = calculateIngredients(
-                                item.label,
-                                saltToAdd,
-                            );
-
-                            return (
-                                <div key={index}>
-                                    {item.label} {output ?? "-"}
-                                </div>
-                            );
-                        })}
+                                                                            <input
+                                                                                className="h-10 w-full rounded-lg border px-2"
+                                                                                type="number"
+                                                                                step="0.01"
+                                                                                value={
+                                                                                    item
+                                                                                        .weighted?.[
+                                                                                        key
+                                                                                    ] ??
+                                                                                    ""
+                                                                                }
+                                                                                onChange={(
+                                                                                    e,
+                                                                                ) =>
+                                                                                    updateWeightedValue(
+                                                                                        index,
+                                                                                        key,
+                                                                                        e
+                                                                                            .target
+                                                                                            .value,
+                                                                                    )
+                                                                                }
+                                                                            />
+                                                                        </label>
+                                                                    ),
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                        </Fragment>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
 
-            {resData && (
-                <div className="mt-6">
-                    <button
-                        type="button"
-                        onClick={() => setShowRawJson((prev) => !prev)}
-                        className="rounded border px-3 py-1 text-sm"
-                    >
-                        {showRawJson ? "隐藏原始 JSON" : "展开原始 JSON"}
-                    </button>
+                {editableData.length > 0 && (
+                    <div className="rounded-2xl border bg-white p-4 shadow-sm">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                            <h2 className="text-lg font-bold">添加结果</h2>
 
-                    {showRawJson && (
-                        <pre className="mt-3 overflow-auto rounded bg-gray-100 p-4 text-sm">
-                            {JSON.stringify(resData, null, 2)}
-                        </pre>
-                    )}
-                </div>
-            )}
+                            <button
+                                type="button"
+                                onClick={copyResult}
+                                className="h-10 shrink-0 rounded-xl bg-black px-4 text-sm font-semibold text-white active:scale-95"
+                            >
+                                {copied ? "已复制" : "一键复制"}
+                            </button>
+                        </div>
+
+                        <div className="rounded-xl bg-gray-50 p-4">
+                            <pre className="whitespace-pre-wrap break-words text-base font-semibold leading-8">
+                                {outputText}
+                            </pre>
+                        </div>
+                    </div>
+                )}
+
+                {resData && (
+                    <div>
+                        <button
+                            type="button"
+                            onClick={() => setShowRawJson((prev) => !prev)}
+                            className="h-10 rounded-xl border px-3 text-sm font-medium"
+                        >
+                            {showRawJson ? "隐藏原始 JSON" : "展开原始 JSON"}
+                        </button>
+
+                        {showRawJson && (
+                            <pre className="mt-3 max-h-[50vh] overflow-auto rounded-xl bg-gray-100 p-4 text-xs">
+                                {JSON.stringify(resData, null, 2)}
+                            </pre>
+                        )}
+                    </div>
+                )}
+            </div>
         </main>
     );
 }

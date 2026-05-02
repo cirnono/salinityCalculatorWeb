@@ -46,9 +46,6 @@ export function recalculateItem(item: CalculationItem): CalculationItem {
         return {
             ...item,
             temperatureValid,
-            temperatureWarning: temperatureValid
-                ? null
-                : "温度不在 20°C ± 1°C 范围内",
         };
     }
 
@@ -61,9 +58,6 @@ export function recalculateItem(item: CalculationItem): CalculationItem {
         salinity,
         temperature,
         temperatureValid,
-        temperatureWarning: temperatureValid
-            ? null
-            : "温度不在 20°C ± 1°C 范围内",
     };
 }
 
@@ -77,9 +71,6 @@ function getSimpleItemResult(item: ExtractedItem): CalculationItem {
         salinity,
         temperature,
         temperatureValid,
-        temperatureWarning: temperatureValid
-            ? null
-            : "温度不在 20°C ± 1°C 范围内",
         raw: item.raw,
         type: "simple",
     };
@@ -103,7 +94,6 @@ function getWeightedItemResult(item: ExtractedItem): CalculationItem {
         salinity: null,
         temperature: weighted.temperature,
         temperatureValid: false,
-        temperatureWarning: null,
         raw: item.raw,
         type: "weighted",
         weighted,
