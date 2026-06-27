@@ -7,6 +7,7 @@ import type { ApiResult, CalculationItem } from "@/lib/types";
 import type { StoreCode } from "@/lib/config";
 import {
     STORES,
+    STORE_PRODUCTS,
     getPotCapacity,
     getTargetSalinity,
     isProductAvailableInStore,
@@ -17,12 +18,17 @@ import {
     recalculateItem,
 } from "@/lib/formula";
 
-const DEFAULT_LABELS = ["尖", "猪", "鸭", "辣", "牛", "鸡"];
+const PRODUCT_CODE_TO_LABEL: Record<string, string> = {
+    duck: "鸭",
+    pork: "猪",
+    feet: "尖",
+    beef: "牛",
+    chicken: "鸡",
+    spicy: "辣",
+};
 
 function getStoreLabels(store: StoreCode): string[] {
-    return DEFAULT_LABELS.filter((label) =>
-        isProductAvailableInStore(store, label),
-    );
+    return STORE_PRODUCTS[store].map((code) => PRODUCT_CODE_TO_LABEL[code]);
 }
 
 function createEmptyRows(store: StoreCode): CalculationItem[] {
@@ -37,20 +43,30 @@ function createEmptyRows(store: StoreCode): CalculationItem[] {
     }));
 }
 
-function mergeRowsWithStoreLabels(
-    emptyRows: CalculationItem[],
-    sourceRows: CalculationItem[],
+function buildRowsFromRecognition(
+    recognizedRows: CalculationItem[],
+    store: StoreCode,
 ): CalculationItem[] {
-    return emptyRows.map((empty) => {
-        const found = sourceRows.find((item) => item.label === empty.label);
+    const seen = new Set<string>();
+    const result: CalculationItem[] = [];
 
-        if (!found) return empty;
+    for (const item of recognizedRows) {
+        if (!isProductAvailableInStore(store, item.label)) continue;
+        if (seen.has(item.label)) continue;
+        seen.add(item.label);
 
-        return {
-            ...found,
-            capacity: empty.capacity,
-        };
-    });
+        result.push({
+            ...item,
+            capacity: getPotCapacity(store, item.label),
+        });
+    }
+
+    // 如果过滤后没有有效品类，回退到门店默认空表格
+    if (result.length === 0) {
+        return createEmptyRows(store);
+    }
+
+    return result;
 }
 
 export default function Home() {
@@ -179,13 +195,7 @@ export default function Home() {
             const data: ApiResult = await res.json();
 
             const recognizedRows = data.calculation ?? [];
-            const emptyRows = createEmptyRows(store);
-            const mergedRows = mergeRowsWithStoreLabels(
-                emptyRows,
-                recognizedRows,
-            );
-
-            setEditableData(mergedRows);
+            setEditableData(buildRowsFromRecognition(recognizedRows, store));
 
             setResData(data);
         } catch {
@@ -200,17 +210,18 @@ export default function Home() {
 
     function resetEditableData() {
         const recognizedRows = resData?.calculation ?? [];
-        const emptyRows = createEmptyRows(selectedStore);
-
-        setEditableData(mergeRowsWithStoreLabels(emptyRows, recognizedRows));
+        setEditableData(buildRowsFromRecognition(recognizedRows, selectedStore));
     }
 
     function changeStore(store: StoreCode) {
         setSelectedStore(store);
 
-        setEditableData((prev) =>
-            mergeRowsWithStoreLabels(createEmptyRows(store), prev),
-        );
+        const recognizedRows = resData?.calculation ?? [];
+        if (recognizedRows.length > 0) {
+            setEditableData(buildRowsFromRecognition(recognizedRows, store));
+        } else {
+            setEditableData(createEmptyRows(store));
+        }
     }
 
     function clearEditableData() {
